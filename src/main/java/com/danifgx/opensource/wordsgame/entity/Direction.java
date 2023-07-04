@@ -29,9 +29,21 @@ public class Direction {
             return dy;
         }
 
+        public static int[][] getDirections() {
+            int[][] directions = new int[Type.values().length][2];
+            for (int i = 0; i < Type.values().length; i++) {
+                Type directionType = Type.values()[i];
+                directions[i][0] = directionType.getDeltaX();
+                directions[i][1] = directionType.getDeltaY();
+            }
+            return directions;
+        }
+
         public static Type randomDirection() {
             Random random = new Random();
             return values()[random.nextInt(values().length)];
         }
+
+
     }
 }

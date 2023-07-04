@@ -51,6 +51,7 @@ public class WordSearchService {
         boolean allWordsPositioned = false;
 
         while (!allWordsPositioned && totalAttempts < 50) {
+            board = new Board(board.getRows(), board.getCols());
             int attempts = 0;
 
             for (String word : words) {
@@ -91,18 +92,28 @@ public class WordSearchService {
     private boolean canPositionWord(String word, Direction.Type direction, int startX, int startY) {
         int deltaX = direction.getDeltaX();
         int deltaY = direction.getDeltaY();
+        int wordLength = word.length();
 
-        for (int i = 0; i < word.length(); i++) {
-            int row = startY + i * deltaY;
-            int col = startX + i * deltaX;
+        int endX = startX + (wordLength - 1) * deltaX;
+        int endY = startY + (wordLength - 1) * deltaY;
 
-            if (!board.isValidPosition(row, col) || !board.isPositionEmpty(row, col) && board.getPosition(row, col) != word.charAt(i)) {
+        if (!board.isValidPosition(endY, endX)) {
+            return false;
+        }
+
+        for (int i = 0; i < wordLength; i++) {
+            int currentX = startX + i * deltaX;
+            int currentY = startY + i * deltaY;
+
+            if (!board.isValidPosition(currentY, currentX) || (!board.isPositionEmpty(currentY, currentX) && board.getPosition(currentY, currentX) != word.charAt(i))) {
                 return false;
             }
         }
 
         return true;
     }
+
+
 
     private void positionWord(String word, Direction.Type direction, int startX, int startY) {
         int deltaX = direction.getDeltaX();
@@ -152,13 +163,13 @@ public class WordSearchService {
     }
 
     private WordSolution findWordSolution(String word) {
-        int[][] directions = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+        Direction.Type[] directions = Direction.Type.values();
 
         for (int row = 0; row < board.getRows(); row++) {
             for (int col = 0; col < board.getCols(); col++) {
-                for (int[] direction : directions) {
-                    int deltaX = direction[0];
-                    int deltaY = direction[1];
+                for (Direction.Type direction : directions) {
+                    int deltaX = direction.getDeltaX();
+                    int deltaY = direction.getDeltaY();
 
                     int endRow = row + (word.length() - 1) * deltaY;
                     int endCol = col + (word.length() - 1) * deltaX;
@@ -174,7 +185,7 @@ public class WordSearchService {
                             }
                         }
                         if (found) {
-                            return new WordSolution(word, new Position(row, col), new Position(endRow, endCol));
+                            return new WordSolution(word, new Position(col, row), new Position(endCol, endRow));
                         }
                     }
                 }
@@ -183,6 +194,7 @@ public class WordSearchService {
 
         return null;
     }
+
 
     public Board getBoard() {
         return board;
