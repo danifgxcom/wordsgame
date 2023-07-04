@@ -22,4 +22,9 @@ public class WordSolution {
     public Position getEndPosition() {
         return endPosition;
     }
+
+    @Override
+    public String toString() {
+        return "Word: " + word + ", Start Position: " + startPosition + ", End Position: " + endPosition;
+    }
 }

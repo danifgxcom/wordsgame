@@ -1,5 +1,6 @@
 package com.danifgx.opensource.wordsgame.service;
 
+import com.danifgx.opensource.wordsgame.entity.Board;
 import com.danifgx.opensource.wordsgame.entity.Direction;
 import com.danifgx.opensource.wordsgame.entity.Position;
 import com.danifgx.opensource.wordsgame.entity.WordSolution;
@@ -15,173 +16,175 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
-
-@RestController
-@RequestMapping("/wordsearch")
 public class WordSearchService {
+    private List<String> words;
+    private Board board;
 
-    // Lista de palabras (constante, puedes cambiarla para obtenerla de MongoDB)
-    private static final String[] WORDS = {"HOLA", "MUNDO", "PRUEBA", "SOPA", "LETRAS"};
-
-    @GetMapping
-    public JsonNode generateWordSearch() {
-        // Generar la matriz de letras
-        char[][] matrix = generateMatrix(10, 10); // Tamaño de la sopa de letras: 10x10
-
-        // Obtener las soluciones (palabra, posición origen y posición destino)
-        List<WordSolution> solutions = findSolutions(matrix, WORDS);
-
-        // Crear el JSON de respuesta
-        ObjectMapper objectMapper = new ObjectMapper();
-        ArrayNode matrixArray = objectMapper.createArrayNode();
-        for (char[] row : matrix) {
-            StringBuilder rowBuilder = new StringBuilder();
-            for (char letter : row) {
-                rowBuilder.append(letter);
-            }
-            matrixArray.add(rowBuilder.toString());
-        }
-
-        ArrayNode solutionsArray = objectMapper.createArrayNode();
-        for (WordSolution solution : solutions) {
-            ObjectNode solutionObject = objectMapper.createObjectNode();
-            solutionObject.put("word", solution.getWord());
-
-            ObjectNode startPositionObject = objectMapper.createObjectNode();
-            startPositionObject.put("x", solution.getStartPosition().getX());
-            startPositionObject.put("y", solution.getStartPosition().getY());
-            solutionObject.set("startPosition", startPositionObject);
-
-            ObjectNode endPositionObject = objectMapper.createObjectNode();
-            endPositionObject.put("x", solution.getEndPosition().getX());
-            endPositionObject.put("y", solution.getEndPosition().getY());
-            solutionObject.set("endPosition", endPositionObject);
-
-            solutionsArray.add(solutionObject);
-        }
-
-        ObjectNode result = objectMapper.createObjectNode();
-        result.set("matrix", matrixArray);
-        result.set("solutions", solutionsArray);
-
-        return result;
+    public WordSearchService(int rows, int cols, List<String> words) {
+        this.words = words;
+        this.board = new Board(rows, cols);
     }
+    public void generateWordSearch() {
+        // Intenta colocar todas las palabras en el tablero
+        boolean allWordsPositioned = tryPositionAllWords();
 
-    private char[][] generateMatrix(int rows, int cols) {
-        char[][] matrix = new char[rows][cols];
-        Random random = new Random();
-
-        // Posicionar las palabras aleatoriamente en la matriz
-        List<String> wordsToPosition = new ArrayList<>(Arrays.asList(WORDS));
-
-        for (String word : WORDS) {
-            boolean positioned = false;
-
-            while (!positioned) {
-                Direction.Type direction = Direction.Type.randomDirection();
-
-                int startX = random.nextInt(rows - word.length() + 1);
-                int startY = random.nextInt(cols - word.length() + 1);
-
-                if (canPositionWord(matrix, word, direction, startX, startY)) {
-                    positionWord(matrix, word, direction, startX, startY);
-                    wordsToPosition.remove(word);
-                    positioned = true;
-                }
-            }
+        // Si no se pudieron colocar todas las palabras, genera una matriz vacía
+        if (!allWordsPositioned) {
+            board = new Board(board.getRows(), board.getCols());
         }
-
 
         // Completar el resto de la matriz con letras aleatorias
-        for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < cols; j++) {
-                if (matrix[i][j] == '\u0000') {
-                    matrix[i][j] = (char) (random.nextInt(26) + 'A'); // Generar una letra aleatoria
+        fillEmptyCells();
+
+        // Imprimir el resultado
+        printWordSearch();
+    }
+
+    private int getRandomCoordinate(int maxCoordinate) {
+        Random random = new Random();
+        return random.nextInt(maxCoordinate);
+    }
+
+    private boolean tryPositionAllWords() {
+        List<String> wordsToPosition = new ArrayList<>(words);
+        int totalAttempts = 0;
+        boolean allWordsPositioned = false;
+
+        while (!allWordsPositioned && totalAttempts < 50) {
+            int attempts = 0;
+
+            for (String word : words) {
+                boolean positioned = false;
+
+                while (!positioned && attempts < 50) {
+                    Direction.Type direction = Direction.Type.randomDirection();
+                    int startX = getRandomCoordinate(board.getCols() - word.length() + 1);
+                    int startY = getRandomCoordinate(board.getRows() - word.length() + 1);
+
+                    if (canPositionWord(word, direction, startX, startY)) {
+                        positionWord(word, direction, startX, startY);
+                        wordsToPosition.remove(word);
+                        positioned = true;
+                    }
+
+                    attempts++;
+                }
+
+                if (!positioned) {
+                    // No se pudo colocar la palabra después de 50 intentos, reiniciar el proceso
+                    wordsToPosition.addAll(words);
+                    board = new Board(board.getRows(), board.getCols());
+                    totalAttempts++;
+                    break;
+                }
+            }
+
+            if (wordsToPosition.isEmpty()) {
+                // Todas las palabras se han posicionado correctamente
+                allWordsPositioned = true;
+            }
+        }
+
+        return allWordsPositioned;
+    }
+
+    private boolean canPositionWord(String word, Direction.Type direction, int startX, int startY) {
+        int deltaX = direction.getDeltaX();
+        int deltaY = direction.getDeltaY();
+
+        for (int i = 0; i < word.length(); i++) {
+            int row = startY + i * deltaY;
+            int col = startX + i * deltaX;
+
+            if (!board.isValidPosition(row, col) || !board.isPositionEmpty(row, col) && board.getPosition(row, col) != word.charAt(i)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void positionWord(String word, Direction.Type direction, int startX, int startY) {
+        int deltaX = direction.getDeltaX();
+        int deltaY = direction.getDeltaY();
+
+        for (int i = 0; i < word.length(); i++) {
+            int row = startY + i * deltaY;
+            int col = startX + i * deltaX;
+            board.setPosition(row, col, word.charAt(i));
+        }
+    }
+
+    private void fillEmptyCells() {
+        Random random = new Random();
+
+        for (int row = 0; row < board.getRows(); row++) {
+            for (int col = 0; col < board.getCols(); col++) {
+                if (board.isPositionEmpty(row, col)) {
+                    board.setPosition(row, col, (char) (random.nextInt(26) + 'A'));
                 }
             }
         }
-
-        return matrix;
     }
 
-    private boolean canPositionWord(char[][] matrix, String word, Direction.Type direction, int startX, int startY) {
-        int rows = matrix.length;
-        int cols = matrix[0].length;
-        int wordLength = word.length();
+    private void printWordSearch() {
+        System.out.println("Matrix:");
+        board.print();
 
-        int deltaX = direction.getDeltaX();
-        int deltaY = direction.getDeltaY();
-
-        int endX = startX + (wordLength - 1) * deltaX;
-        int endY = startY + (wordLength - 1) * deltaY;
-
-        return endX >= 0 && endX < cols && endY >= 0 && endY < rows && !hasCollision(matrix, word, startX, startY, deltaX, deltaY);
-    }
-
-    private boolean hasCollision(char[][] matrix, String word, int startX, int startY, int deltaX, int deltaY) {
-        int wordLength = word.length();
-
-        for (int i = 0; i < wordLength; i++) {
-            char currentLetter = matrix[startY + i * deltaY][startX + i * deltaX];
-            if (currentLetter != '\u0000' && currentLetter != word.charAt(i)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private void positionWord(char[][] matrix, String word, Direction.Type direction, int startX, int startY) {
-        int deltaX = direction.getDeltaX();
-        int deltaY = direction.getDeltaY();
-
-        int wordLength = word.length();
-
-        for (int i = 0; i < wordLength; i++) {
-            matrix[startY + i * deltaY][startX + i * deltaX] = word.charAt(i);
+        System.out.println("Solutions:");
+        List<WordSolution> solutions = findWordSolutions();
+        for (WordSolution solution : solutions) {
+            System.out.println(solution);
         }
     }
 
-    private List<WordSolution> findSolutions(char[][] matrix, String[] words) {
-        int rows = matrix.length;
-        int cols = matrix[0].length;
+    public  List<WordSolution> findWordSolutions() {
         List<WordSolution> solutions = new ArrayList<>();
 
         for (String word : words) {
-            for (int i = 0; i < rows; i++) {
-                for (int j = 0; j < cols; j++) {
-                    if (matrix[i][j] == word.charAt(0)) {
-                        WordSolution solution = findWord(matrix, word, i, j);
-                        if (solution != null) {
-                            solutions.add(solution);
-                        }
-                    }
-                }
+            WordSolution solution = findWordSolution(word);
+            if (solution != null) {
+                solutions.add(solution);
             }
         }
 
         return solutions;
     }
 
-    private WordSolution findWord(char[][] matrix, String word, int startX, int startY) {
-        int rows = matrix.length;
-        int cols = matrix[0].length;
-        int wordLength = word.length();
+    private WordSolution findWordSolution(String word) {
+        int[][] directions = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
 
-        for (Direction.Type direction : Direction.Type.values()) {
-            if (canPositionWord(matrix, word, direction, startX, startY)) {
-                int deltaX = direction.getDeltaX();
-                int deltaY = direction.getDeltaY();
+        for (int row = 0; row < board.getRows(); row++) {
+            for (int col = 0; col < board.getCols(); col++) {
+                for (int[] direction : directions) {
+                    int deltaX = direction[0];
+                    int deltaY = direction[1];
 
-                int endX = startX + (wordLength - 1) * deltaX;
-                int endY = startY + (wordLength - 1) * deltaY;
+                    int endRow = row + (word.length() - 1) * deltaY;
+                    int endCol = col + (word.length() - 1) * deltaX;
 
-                WordSolution ws = new WordSolution(word, new Position(startX, startY), new Position(endX, endY));
-                positionWord(matrix, word, direction, startX, startY);
-                return ws;
+                    if (board.isValidPosition(endRow, endCol)) {
+                        boolean found = true;
+                        for (int i = 0; i < word.length(); i++) {
+                            int currentRow = row + i * deltaY;
+                            int currentCol = col + i * deltaX;
+                            if (board.getPosition(currentRow, currentCol) != word.charAt(i)) {
+                                found = false;
+                                break;
+                            }
+                        }
+                        if (found) {
+                            return new WordSolution(word, new Position(row, col), new Position(endRow, endCol));
+                        }
+                    }
+                }
             }
         }
 
         return null;
+    }
+
+    public Board getBoard() {
+        return board;
     }
 }
